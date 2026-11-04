@@ -153,18 +153,8 @@ export default function LoginPage() {
       localStorage.setItem("siem_user",  JSON.stringify(data.user));
       router.push("/dashboard");
     } catch {
-      // Demo mode
-      if (loginUser === "admin" && loginPass === "Admin2024!") {
-        localStorage.setItem("siem_token", "demo-token");
-        localStorage.setItem("siem_user",  JSON.stringify({
-          uuid: "a1b2c3d4-0001", username: "admin", role: "admin",
-          name: "Administrador SIEM", email: "admin@siem.local", age: null,
-        }));
-        router.push("/dashboard");
-      } else {
-        setLoginError('Backend no disponible — usa "admin" para modo demo');
-        setLoginLoading(false);
-      }
+      setLoginError("No se pudo contactar con el servidor");
+      setLoginLoading(false);
     }
   };
 
