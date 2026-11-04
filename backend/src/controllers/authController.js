@@ -3,6 +3,7 @@ const jwt    = require('jsonwebtoken');
 const path   = require('path');
 const fs     = require('fs');
 const db     = require('../services/dbAdapter');
+const lockout = require('../services/lockoutService');
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ const calcAge = (birthDate) => {
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+const DUMMY_HASH = bcrypt.hashSync('equalizador-de-tiempo', 12);
 
 // ── Login ────────────────────────────────────────────────────
 
@@ -27,15 +29,40 @@ const login = async (req, res) => {
             return res.status(400).json({ error: 'Username y password son requeridos' });
 
         const user = await db.getUserByUsername(username.trim());
-        if (!user)
-            return res.status(401).json({ error: 'Credenciales inválidas' });
+        const GENERIC = 'Credenciales inválidas o cuenta bloqueada temporalmente';
+        const audit = async (action, extra = {}) => {
+            try {
+                await db.logAuditAction({ userUuid: user ? user.uuid : null, action, targetType: null, targetId: null,
+                    oldValues: null, newValues: { username: username.trim(), ...extra }, ipAddress: req.ip });
+            } catch (e) { console.log('Audit log skipped:', e.message); }
+        };
 
+        // Usuario inexistente: hash ficticio para igualar el tiempo de respuesta (H-10)
+        if (!user) {
+            await bcrypt.compare(password, DUMMY_HASH);
+            await audit('login_failed', { reason: 'unknown_user' });
+            return res.status(401).json({ error: GENERIC });
+        }
+
+        // Cuenta bloqueada temporalmente por intentos fallidos (H-09)
+        if (await lockout.isLocked(user.username)) {
+            await bcrypt.compare(password, DUMMY_HASH);
+            await audit('login_blocked');
+            return res.status(401).json({ error: GENERIC });
+        }
+
+        const passwordMatch = await bcrypt.compare(password, user.password_hash);
+        if (!passwordMatch) {
+            const nowLocked = await lockout.registerFailure(user.username);
+            await audit(nowLocked ? 'account_locked' : 'login_failed', nowLocked ? { minutes: lockout.LOCK_MINUTES } : {});
+            return res.status(401).json({ error: GENERIC });
+        }
+
+        // El estado de la cuenta solo se revela a quien ya conoce la contraseña (H-10)
         if (user.status !== 'active')
             return res.status(403).json({ error: 'Cuenta inactiva o bloqueada' });
 
-        const passwordMatch = await bcrypt.compare(password, user.password_hash);
-        if (!passwordMatch)
-            return res.status(401).json({ error: 'Credenciales inválidas' });
+        await lockout.reset(user.username);
 
         const age = user.birth_date ? calcAge(user.birth_date) : null;
 
