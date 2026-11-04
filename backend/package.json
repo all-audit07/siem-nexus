@@ -1,0 +1,30 @@
+{
+  "name": "siem-backend",
+  "version": "1.0.0",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "fast-xml-parser": "^5.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "jszip": "^3.10.1",
+    "morgan": "^1.10.0",
+    "mssql": "^12.6.0",
+    "multer": "^2.0.2",
+    "mysql2": "^3.10.0",
+    "pdfkit": "^0.17.2",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

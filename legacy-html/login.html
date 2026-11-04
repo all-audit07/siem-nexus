@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIEM — Login</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:        #0F172A;
+    --sidebar:   #111827;
+    --card:      #1E293B;
+    --border:    #334155;
+    --text:      #E2E8F0;
+    --muted:     #94A3B8;
+    --accent:    #3B82F6;
+    --accent-glow: rgba(59,130,246,0.15);
+    --danger:    #EF4444;
+    --success:   #22C55E;
+    --warn:      #EAB308;
+    --mysql:     #F59E0B;
+    --pg:        #3B82F6;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    font-family: var(--sans);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── Left panel ── */
+  .left-panel {
+    flex: 1; position: relative; display: flex; flex-direction: column;
+    justify-content: space-between; padding: 48px;
+    background: var(--sidebar); border-right: 1px solid var(--border); overflow-y: auto;
+  }
+  .grid-bg {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(59,130,246,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.05) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none;
+  }
+  .radial-glow {
+    position: absolute; width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+    top: -100px; left: -100px; pointer-events: none;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; position: relative; z-index: 1; }
+  .brand-icon {
+    width: 48px; height: 48px; background: linear-gradient(135deg, var(--accent), #1D4ED8);
+    border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 24px rgba(59,130,246,0.4);
+  }
+  .brand-text h1 { font-family: var(--mono); font-size: 20px; font-weight: 600; letter-spacing: 0.08em; color: var(--text); }
+  .brand-text p  { font-size: 12px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2px; }
+  .metrics-container { position: relative; z-index: 1; }
+  .metrics-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+  .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.8)} }
+  .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+  .metric-card { background: rgba(30,41,59,0.6); border: 1px solid var(--border); border-radius: 10px; padding: 16px; backdrop-filter: blur(8px); }
+  .metric-card.critical { border-left: 3px solid var(--danger); }
+  .metric-card.high     { border-left: 3px solid #F97316; }
+  .metric-card.medium   { border-left: 3px solid var(--warn); }
+  .metric-card.info     { border-left: 3px solid var(--accent); }
+  .metric-value { font-family: var(--mono); font-size: 32px; font-weight: 600; color: var(--text); line-height: 1; }
+  .metric-label { font-size: 11px; color: var(--muted); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .event-feed { background: rgba(15,23,42,0.8); border: 1px solid var(--border); border-radius: 10px; padding: 16px; font-family: var(--mono); font-size: 11px; max-height: 160px; overflow-y: auto; position: relative; }
+  .event-feed::after { content:''; position:absolute; bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,rgba(15,23,42,0.9)); }
+  .event-line { display:flex;gap:12px;margin-bottom:8px;align-items:flex-start;animation:slideIn 0.4s ease; }
+  @keyframes slideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .event-time{color:var(--muted);white-space:nowrap}.event-sev{font-weight:600;white-space:nowrap}
+  .sev-crit{color:var(--danger)}.sev-high{color:#F97316}.sev-med{color:var(--warn)}.sev-info{color:var(--accent)}
+  .event-msg{color:var(--text);opacity:0.8}
+  .motors-bar { display:flex;gap:8px;position:relative;z-index:1;margin-top:20px; }
+  .motor-badge { display:flex;align-items:center;gap:6px;background:rgba(30,41,59,0.6);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:500; }
+  .motor-dot{width:6px;height:6px;border-radius:50%}
+  .mysql-dot{background:var(--mysql);box-shadow:0 0 6px var(--mysql)}.pg-dot{background:var(--pg);box-shadow:0 0 6px var(--pg)}
+
+  /* ── Right panel ── */
+  .right-panel {
+    width: 460px; min-width: 460px; position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 48px 40px; background: var(--bg); overflow-y: auto;
+  }
+
+  /* ── Panels slide ── */
+  .panel-login, .panel-register {
+    width: 100%; max-width: 380px;
+    transition: transform 0.4s ease, opacity 0.4s ease;
+    position: absolute;
+  }
+  .panel-login    { transform: translateX(0);    opacity: 1; }
+  .panel-register { transform: translateX(100%); opacity: 0; pointer-events: none; }
+  .panel-login.hidden    { transform: translateX(-100%); opacity: 0; pointer-events: none; }
+  .panel-register.visible { transform: translateX(0);   opacity: 1; pointer-events: all; }
+
+  /* ── Shared form styles ── */
+  .form-header { margin-bottom: 28px; }
+  .form-header h2 { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+  .form-header p  { font-size: 14px; color: var(--muted); margin-top: 6px; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label { display:block; font-size:12px; font-weight:500; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:7px; }
+  .input-wrapper { position:relative; display:flex; align-items:center; }
+  .input-icon { position:absolute; left:14px; color:var(--muted); pointer-events:none; }
+  .form-input {
+    width:100%; background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px 12px 42px; font-family:var(--sans); font-size:14px; color:var(--text); outline:none;
+    transition:border-color 0.2s, box-shadow 0.2s;
+  }
+  .form-input::placeholder{color:var(--muted);opacity:0.6}
+  .form-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+  .form-input.error{border-color:var(--danger);box-shadow:0 0 0 3px rgba(239,68,68,0.1)}
+  .form-input.valid{border-color:var(--success);box-shadow:0 0 0 3px rgba(34,197,94,0.1)}
+  .form-input.no-icon{padding-left:14px}
+
+  .input-status { position:absolute; right:12px; font-size:12px; }
+
+  .toggle-password { position:absolute; right:14px; background:none; border:none; cursor:pointer; color:var(--muted); padding:0; transition:color 0.2s; }
+  .toggle-password:hover{color:var(--text)}
+
+  .error-msg { margin-top:6px; font-size:12px; color:var(--danger); display:flex; align-items:center; gap:6px; opacity:0; transition:opacity 0.2s; height:0; overflow:hidden; }
+  .error-msg.visible { opacity:1; height:auto; }
+  .hint-msg { margin-top:6px; font-size:11px; color:var(--muted); font-family:var(--mono); }
+
+  .btn-login, .btn-register {
+    width:100%; padding:13px; background:var(--accent); border:none; border-radius:10px;
+    font-family:var(--sans); font-size:15px; font-weight:600; color:white; cursor:pointer;
+    margin-top:8px; transition:background 0.2s, transform 0.1s, box-shadow 0.2s;
+    letter-spacing:0.02em;
+  }
+  .btn-login:hover,.btn-register:hover{background:#2563EB;box-shadow:0 0 20px rgba(59,130,246,0.4)}
+  .btn-login:active,.btn-register:active{transform:scale(0.98)}
+  .btn-login:disabled,.btn-register:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+  .btn-register{background:#7C3AED}
+  .btn-register:hover{background:#6D28D9;box-shadow:0 0 20px rgba(124,58,237,0.4)}
+
+  .spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .global-error { background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:12px 16px; font-size:13px; color:#FCA5A5; margin-bottom:16px; display:none; align-items:center; gap:10px; }
+  .global-error.visible{display:flex}
+  .global-success { background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.3); border-radius:8px; padding:12px 16px; font-size:13px; color:#86EFAC; margin-bottom:16px; display:none; align-items:center; gap:10px; }
+  .global-success.visible{display:flex}
+
+  .divider { display:flex; align-items:center; gap:12px; margin:20px 0; }
+  .divider-line { flex:1; height:1px; background:var(--border); }
+  .divider-text { font-size:11px; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; font-family:var(--mono); }
+
+  .demo-accounts { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .demo-label { font-family:var(--mono); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+  .demo-row { display:flex; justify-content:space-between; align-items:center; padding:7px 8px; border-bottom:1px solid rgba(51,65,85,0.5); cursor:pointer; transition:background 0.15s; border-radius:4px; }
+  .demo-row:last-child{border-bottom:none}
+  .demo-row:hover{background:rgba(59,130,246,0.05)}
+  .demo-user{font-family:var(--mono);font-size:12px;color:var(--text)}
+  .demo-role{font-size:10px;padding:2px 8px;border-radius:4px;font-weight:500;letter-spacing:0.06em}
+  .role-admin{background:rgba(239,68,68,0.15);color:#FCA5A5}
+  .role-analyst{background:rgba(59,130,246,0.15);color:#93C5FD}
+  .role-auditor{background:rgba(234,179,8,0.15);color:#FDE047}
+  .role-viewer{background:rgba(34,197,94,0.15);color:#86EFAC}
+
+  .switch-link { text-align:center; margin-top:20px; font-size:13px; color:var(--muted); }
+  .switch-link a { color:var(--accent); cursor:pointer; text-decoration:none; font-weight:500; }
+  .switch-link a:hover { text-decoration:underline; }
+
+  .footer-note { margin-top:20px; text-align:center; font-family:var(--mono); font-size:10px; color:var(--muted); opacity:0.6; letter-spacing:0.08em; }
+
+  /* ── Avatar upload ── */
+  .avatar-upload-area {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 20px;
+    text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .avatar-upload-area:hover { border-color: var(--accent); background: rgba(59,130,246,0.04); }
+  .avatar-upload-area.has-image { border-style: solid; border-color: var(--success); }
+  .avatar-preview {
+    width: 72px; height: 72px; border-radius: 50%; object-fit: cover;
+    margin: 0 auto 10px; display: none; border: 2px solid var(--success);
+  }
+  .avatar-preview.visible { display: block; }
+  .avatar-placeholder { color: var(--muted); font-size: 13px; }
+  .avatar-placeholder svg { margin: 0 auto 8px; display: block; }
+  .avatar-info { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+  .avatar-remove { position:absolute; top:8px; right:8px; background:rgba(239,68,68,0.15); border:none; color:var(--danger); border-radius:50%; width:22px; height:22px; cursor:pointer; font-size:14px; display:none; align-items:center; justify-content:center; }
+  .avatar-remove.visible { display:flex; }
+
+  /* ── Password strength ── */
+  .strength-bar { display:flex; gap:3px; margin-top:8px; }
+  .strength-seg { flex:1; height:3px; border-radius:2px; background:var(--border); transition:background 0.3s; }
+  .strength-label { font-size:11px; margin-top:4px; font-family:var(--mono); }
+
+  /* ── Date input ── */
+  input[type="date"] {
+    color-scheme: dark;
+    padding-left: 14px !important;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.6);
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── LEFT PANEL ── -->
+<div class="left-panel">
+  <div class="grid-bg"></div>
+  <div class="radial-glow"></div>
+
+  <div class="brand">
+    <div class="brand-icon">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+        <path d="M13 2L3 7v6c0 5.5 4.3 10.7 10 12 5.7-1.3 10-6.5 10-12V7L13 2z" fill="rgba(255,255,255,0.15)" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M9 13l2.5 2.5L17 10" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>SIEM NEXUS</h1>
+      <p>Security Information & Event Management</p>
+    </div>
+  </div>
+
+  <div class="metrics-container">
+    <div class="metrics-label"><div class="pulse-dot"></div>Sistema activo — datos en tiempo real</div>
+    <div class="metrics-grid">
+      <div class="metric-card critical"><div class="metric-value" id="m-incidents">5</div><div class="metric-label">Incidentes activos</div></div>
+      <div class="metric-card high"><div class="metric-value" id="m-alerts">8</div><div class="metric-label">Alertas abiertas</div></div>
+      <div class="metric-card medium"><div class="metric-value" id="m-events">20</div><div class="metric-label">Eventos (24h)</div></div>
+      <div class="metric-card info"><div class="metric-value" id="m-vulns">4</div><div class="metric-label">Vulns críticas</div></div>
+    </div>
+    <div class="event-feed" id="event-feed"></div>
+    <div class="motors-bar">
+      <div class="motor-badge"><div class="motor-dot mysql-dot"></div>MySQL — Gestión</div>
+      <div class="motor-badge"><div class="motor-dot pg-dot"></div>PostgreSQL — Correlación</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── RIGHT PANEL ── -->
+<div class="right-panel">
+
+  <!-- ══ LOGIN PANEL ══ -->
+  <div class="panel-login" id="panel-login">
+    <div class="form-header">
+      <h2>Acceso al sistema</h2>
+      <p>Autenticación requerida para continuar</p>
+    </div>
+
+    <div class="global-error" id="login-error">
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <span id="login-error-text"></span>
+    </div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label class="form-label">Usuario</label>
+        <div class="input-wrapper">
+          <span class="input-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          </span>
+          <input type="text" id="username" class="form-input" placeholder="username" autocomplete="username" required>
+        </div>
+        <div class="error-msg" id="username-error">
+          <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+          <span>El campo usuario es requerido</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <div class="input-wrapper">
+          <span class="input-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </span>
+          <input type="password" id="password" class="form-input" placeholder="••••••••" autocomplete="current-password" required>
+          <button type="button" class="toggle-password" onclick="togglePassword('password','eye-login')">
+            <svg id="eye-login" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
+        <div class="error-msg" id="password-error">
+          <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+          <span>La contraseña es requerida</span>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-login" id="btn-login">Ingresar al SIEM</button>
+    </form>
+
+    <div class="divider"><div class="divider-line"></div><div class="divider-text">Cuentas de demo</div><div class="divider-line"></div></div>
+
+    <div class="demo-accounts">
+      <div class="demo-label">Haz clic para autocompletar</div>
+      <div class="demo-row" onclick="fillDemo('admin','Admin2024!')"><span class="demo-user">admin</span><span class="demo-role role-admin">ADMIN</span></div>
+      <div class="demo-row" onclick="fillDemo('ana.gomez','Analyst2024!')"><span class="demo-user">ana.gomez</span><span class="demo-role role-analyst">ANALYST</span></div>
+      <div class="demo-row" onclick="fillDemo('lucia.chen','Auditor2024!')"><span class="demo-user">lucia.chen</span><span class="demo-role role-auditor">AUDITOR</span></div>
+      <div class="demo-row" onclick="fillDemo('pedro.silva','Viewer2024!')"><span class="demo-user">pedro.silva</span><span class="demo-role role-viewer">VIEWER</span></div>
+    </div>
+
+    <div class="switch-link">¿No tienes cuenta? <a onclick="showRegister()">Regístrate aquí</a></div>
+    <div class="footer-note">SIEM NEXUS v1.0 — MySQL + PostgreSQL — Multi-Motor</div>
+  </div>
+
+  <!-- ══ REGISTER PANEL ══ -->
+  <div class="panel-register" id="panel-register">
+    <div class="form-header">
+      <h2>Crear cuenta</h2>
+      <p>Completa los datos para registrarte en el SIEM</p>
+    </div>
+
+    <div class="global-error" id="reg-error">
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <span id="reg-error-text"></span>
+    </div>
+    <div class="global-success" id="reg-success">
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+      <span id="reg-success-text"></span>
+    </div>
+
+    <form id="register-form" autocomplete="off">
+
+      <!-- Avatar -->
+      <div class="form-group">
+        <label class="form-label">Foto de perfil <span style="color:var(--muted);font-size:10px">(opcional · JPG, PNG o WebP · máx 2MB · máx 400×400px)</span></label>
+        <div class="avatar-upload-area" id="avatar-area" onclick="document.getElementById('avatar-file').click()">
+          <img class="avatar-preview" id="avatar-preview" src="" alt="Preview">
+          <div class="avatar-placeholder" id="avatar-placeholder">
+            <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="var(--muted)" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+            Haz clic para subir una imagen
+          </div>
+          <div class="avatar-info" id="avatar-info"></div>
+          <button type="button" class="avatar-remove" id="avatar-remove" onclick="removeAvatar(event)">✕</button>
+        </div>
+        <input type="file" id="avatar-file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleAvatar(this)">
+        <div class="error-msg" id="avatar-error"><span></span></div>
+      </div>
+
+      <!-- Nombre completo -->
+      <div class="form-group">
+        <label class="form-label">Nombre completo</label>
+        <div class="input-wrapper">
+          <span class="input-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </span>
+          <input type="text" id="reg-fullname" class="form-input" placeholder="Juan Pérez" maxlength="60" required>
+        </div>
+        <div class="error-msg" id="fullname-error"><span>El nombre completo es requerido</span></div>
+      </div>
+
+      <!-- Username -->
+      <div class="form-group">
+        <label class="form-label">Nombre de usuario</label>
+        <div class="input-wrapper">
+          <span class="input-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          </span>
+          <input type="text" id="reg-username" class="form-input" placeholder="juan.perez" maxlength="20" required oninput="checkUsernameAvail()">
+          <span class="input-status" id="username-status"></span>
+        </div>
+        <div class="hint-msg">3–20 caracteres. Solo letras, números, puntos y guiones bajos.</div>
+        <div class="error-msg" id="reg-username-error"><span id="reg-username-error-text">Username inválido</span></div>
+      </div>
+
+      <!-- Email -->
+      <div class="form-group">
+        <label class="form-label">Correo electrónico</label>
+        <div class="input-wrapper">
+          <span class="input-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          </span>
+          <input type="email" id="reg-email" class="form-input" placeholder="juan@empresa.com" maxlength="254" required oninput="checkEmailAvail()">
+          <span class="input-status" id="email-status"></span>
+        </div>
+        <div class="error-msg" id="reg-email-error"><span id="reg-email-error-text">Email inválido</span></div>
+      </div>
+
+      <!-- Fecha de nacimiento -->
+      <div class="form-group">
+        <label class="form-label">Fecha de nacimiento</label>
+        <div class="input-wrapper">
+          <input type="date" id="reg-birthdate" class="form-input no-icon" required onchange="validateAge()">
+        </div>
+        <div class="hint-msg" id="age-hint"></div>
+        <div class="error-msg" id="birthdate-error"><span id="birthdate-error-text">Debes tener al menos 18 años</span></div>
+      </div>
+
+      <!-- Password -->
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <div class="input-wrapper">
+          <span class="input-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </span>
+          <input type="password" id="reg-password" class="form-input" placeholder="Mínimo 8 caracteres" required oninput="checkStrength()">
+          <button type="button" class="toggle-password" onclick="togglePassword('reg-password','eye-reg')">
+            <svg id="eye-reg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
+        <div class="strength-bar">
+          <div class="strength-seg" id="str1"></div>
+          <div class="strength-seg" id="str2"></div>
+          <div class="strength-seg" id="str3"></div>
+          <div class="strength-seg" id="str4"></div>
+        </div>
+        <div class="strength-label" id="strength-label" style="color:var(--muted)"></div>
+        <div class="error-msg" id="reg-password-error"><span>La contraseña debe tener al menos 8 caracteres</span></div>
+      </div>
+
+      <!-- Confirmar password -->
+      <div class="form-group">
+        <label class="form-label">Confirmar contraseña</label>
+        <div class="input-wrapper">
+          <span class="input-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          </span>
+          <input type="password" id="reg-confirm" class="form-input" placeholder="Repite tu contraseña" required>
+          <button type="button" class="toggle-password" onclick="togglePassword('reg-confirm','eye-confirm')">
+            <svg id="eye-confirm" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
+        <div class="error-msg" id="confirm-error"><span>Las contraseñas no coinciden</span></div>
+      </div>
+
+      <button type="submit" class="btn-register" id="btn-register">Crear cuenta</button>
+    </form>
+
+    <div class="switch-link">¿Ya tienes cuenta? <a onclick="showLogin()">Inicia sesión</a></div>
+  </div>
+
+</div><!-- /right-panel -->
+
+<script>
+const API = 'http://localhost:3000/api';
+
+// ── Event feed ───────────────────────────────────────────────
+const eventTypes = [
+  { sev:'CRIT', cls:'sev-crit', msgs:['Ransomware detectado en fileserver-03','Umbral brute force alcanzado desde 185.220.101.45'] },
+  { sev:'HIGH', cls:'sev-high', msgs:['Movimiento lateral desde workstation-15','Privilege escalation en workstation-22'] },
+  { sev:'MED',  cls:'sev-med',  msgs:['Port scan TCP desde 203.0.113.77','DNS tunneling detectado en db-server-01'] },
+  { sev:'INFO', cls:'sev-info', msgs:['Login SSH exitoso — ana.gomez','Backup nocturno completado'] },
+];
+function pad(n){return String(n).padStart(2,'0')}
+function nowStr(){const d=new Date();return`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`}
+function addEventLine(){
+  const feed=document.getElementById('event-feed');
+  const e=eventTypes[Math.floor(Math.random()*eventTypes.length)];
+  const msg=e.msgs[Math.floor(Math.random()*e.msgs.length)];
+  const line=document.createElement('div');
+  line.className='event-line';
+  line.innerHTML=`<span class="event-time">${nowStr()}</span><span class="event-sev ${e.cls}">[${e.sev}]</span><span class="event-msg">${msg}</span>`;
+  feed.insertBefore(line,feed.firstChild);
+  const lines=feed.querySelectorAll('.event-line');
+  if(lines.length>8)lines[lines.length-1].remove();
+}
+for(let i=0;i<5;i++)addEventLine();
+setInterval(addEventLine,3500);
+
+function animateCounter(el,target){
+  let c=0;const step=target/20;
+  const t=setInterval(()=>{c=Math.min(c+step,target);el.textContent=Math.round(c);if(c>=target)clearInterval(t)},40);
+}
+animateCounter(document.getElementById('m-incidents'),5);
+animateCounter(document.getElementById('m-alerts'),8);
+animateCounter(document.getElementById('m-events'),20);
+animateCounter(document.getElementById('m-vulns'),4);
+
+// ── Panel switch ─────────────────────────────────────────────
+function showRegister(){
+  document.getElementById('panel-login').classList.add('hidden');
+  document.getElementById('panel-register').classList.add('visible');
+}
+function showLogin(){
+  document.getElementById('panel-login').classList.remove('hidden');
+  document.getElementById('panel-register').classList.remove('visible');
+  document.getElementById('reg-error').classList.remove('visible');
+  document.getElementById('reg-success').classList.remove('visible');
+}
+
+// ── Demo fill ─────────────────────────────────────────────────
+function fillDemo(user,pass){
+  document.getElementById('username').value=user;
+  document.getElementById('password').value=pass;
+  document.getElementById('username').classList.remove('error');
+  document.getElementById('password').classList.remove('error');
+  document.getElementById('login-error').classList.remove('visible');
+}
+
+// ── Toggle password ───────────────────────────────────────────
+const eyeState={};
+function togglePassword(inputId,eyeId){
+  eyeState[inputId]=!eyeState[inputId];
+  document.getElementById(inputId).type=eyeState[inputId]?'text':'password';
+}
+
+// ── Avatar handling ───────────────────────────────────────────
+const MAX_SIZE = 2 * 1024 * 1024;
+const ALLOWED  = ['image/jpeg','image/png','image/webp'];
+let avatarBase64 = null;
+let avatarMime   = null;
+
+function handleAvatar(input){
+  const file = input.files[0];
+  if(!file) return;
+
+  const errEl = document.getElementById("avatar-error");
+  const errSpan = errEl.querySelector("span");
+
+  if(!ALLOWED.includes(file.type)){
+    errSpan.textContent = "Solo se permiten imágenes JPG, PNG o WebP";
+    errEl.classList.add("visible");
+    input.value=""; return;
+  }
+  if(file.size > MAX_SIZE){
+    errSpan.textContent = `La imagen pesa ${(file.size/1024/1024).toFixed(1)}MB — máximo 2MB`;
+    errEl.classList.add("visible");
+    input.value=""; return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    const img = new Image();
+    img.onload = () => {
+      if(img.width > 400 || img.height > 400){
+        errSpan.textContent = `La imagen mide ${img.width}×${img.height}px — máximo 400×400px`;
+        errEl.classList.add("visible");
+        input.value=""; avatarBase64=null; avatarMime=null; return;
+      }
+      errEl.classList.remove("visible");
+      avatarBase64 = dataUrl.split(",")[1];
+      avatarMime   = file.type;
+      const preview = document.getElementById("avatar-preview");
+      const placeholder = document.getElementById("avatar-placeholder");
+      const area = document.getElementById("avatar-area");
+      const info = document.getElementById("avatar-info");
+      const removeBtn = document.getElementById("avatar-remove");
+      preview.src = dataUrl;
+      preview.classList.add("visible");
+      placeholder.style.display = "none";
+      area.classList.add("has-image");
+      info.textContent = `${file.name} — ${(file.size/1024).toFixed(0)}KB — ${img.width}×${img.height}px`;
+      removeBtn.classList.add("visible");
+    };
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeAvatar(e){
+  e.stopPropagation();
+  avatarBase64 = null; avatarMime = null;
+  document.getElementById('avatar-file').value='';
+  document.getElementById('avatar-preview').classList.remove('visible');
+  document.getElementById('avatar-placeholder').style.display='';
+  document.getElementById('avatar-area').classList.remove('has-image');
+  document.getElementById('avatar-info').textContent='';
+  document.getElementById('avatar-remove').classList.remove('visible');
+}
+
+// ── Username availability ─────────────────────────────────────
+let usernameTimer = null;
+function checkUsernameAvail(){
+  const val = document.getElementById('reg-username').value.trim();
+  const status = document.getElementById('username-status');
+  const errEl  = document.getElementById('reg-username-error');
+  const errTxt = document.getElementById('reg-username-error-text');
+  const input  = document.getElementById('reg-username');
+
+  clearTimeout(usernameTimer);
+  input.classList.remove('valid','error');
+  status.textContent='';
+
+  if(val.length < 3) return;
+  if(!/^[a-zA-Z0-9._]+$/.test(val)){
+    errTxt.textContent='Solo letras, números, puntos y guiones bajos';
+    errEl.classList.add('visible');
+    input.classList.add('error');
+    return;
+  }
+  errEl.classList.remove('visible');
+  status.textContent='⏳';
+
+  usernameTimer = setTimeout(async()=>{
+    try{
+      const r = await fetch(`${API}/auth/check-username?username=${encodeURIComponent(val)}`);
+      const d = await r.json();
+      if(d.available){
+        status.textContent='✅';
+        input.classList.add('valid');
+        errEl.classList.remove('visible');
+      } else {
+        status.textContent='❌';
+        input.classList.add('error');
+        errTxt.textContent=`El username "${val}" ya está en uso`;
+        errEl.classList.add('visible');
+      }
+    } catch{status.textContent='';}
+  }, 600);
+}
+
+// ── Email availability ────────────────────────────────────────
+let emailTimer = null;
+function checkEmailAvail(){
+  const val = document.getElementById('reg-email').value.trim();
+  const status = document.getElementById('email-status');
+  const errEl  = document.getElementById('reg-email-error');
+  const errTxt = document.getElementById('reg-email-error-text');
+  const input  = document.getElementById('reg-email');
+
+  clearTimeout(emailTimer);
+  input.classList.remove('valid','error');
+  status.textContent='';
+
+  if(!val.includes('@') || val.length < 5) return;
+  errEl.classList.remove('visible');
+  status.textContent='⏳';
+
+  emailTimer = setTimeout(async()=>{
+    try{
+      const r = await fetch(`${API}/auth/check-email?email=${encodeURIComponent(val)}`);
+      const d = await r.json();
+      if(d.available){
+        status.textContent='✅';
+        input.classList.add('valid');
+        errEl.classList.remove('visible');
+      } else {
+        status.textContent='❌';
+        input.classList.add('error');
+        errTxt.textContent=`El email "${val}" ya está registrado`;
+        errEl.classList.add('visible');
+      }
+    } catch{status.textContent='';}
+  }, 600);
+}
+
+// ── Age validation ────────────────────────────────────────────
+function validateAge(){
+  const val = document.getElementById('reg-birthdate').value;
+  const hint = document.getElementById('age-hint');
+  const errEl = document.getElementById('birthdate-error');
+  const errTxt = document.getElementById('birthdate-error-text');
+  const input = document.getElementById('reg-birthdate');
+
+  if(!val){ hint.textContent=''; return; }
+
+  const today = new Date();
+  const birth = new Date(val);
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if(m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+
+  if(age < 0 || age > 120){
+    errTxt.textContent='Fecha de nacimiento inválida';
+    errEl.classList.add('visible');
+    input.classList.add('error');
+    hint.textContent='';
+    return;
+  }
+  if(age < 18){
+    errTxt.textContent=`Tienes ${age} años — debes tener al menos 18`;
+    errEl.classList.add('visible');
+    input.classList.add('error');
+    hint.textContent='';
+    return;
+  }
+  errEl.classList.remove('visible');
+  input.classList.remove('error');
+  input.classList.add('valid');
+  hint.textContent=`Edad: ${age} años`;
+  hint.style.color='var(--success)';
+}
+
+// ── Password strength ─────────────────────────────────────────
+function checkStrength(){
+  const val = document.getElementById('reg-password').value;
+  const segs = [document.getElementById('str1'),document.getElementById('str2'),document.getElementById('str3'),document.getElementById('str4')];
+  const label = document.getElementById('strength-label');
+
+  let score = 0;
+  if(val.length >= 8) score++;
+  if(/[A-Z]/.test(val)) score++;
+  if(/[0-9]/.test(val)) score++;
+  if(/[^a-zA-Z0-9]/.test(val)) score++;
+
+  const colors = ['#EF4444','#F97316','#EAB308','#22C55E'];
+  const labels = ['Muy débil','Débil','Moderada','Fuerte'];
+
+  segs.forEach((s,i)=>{ s.style.background = i < score ? colors[score-1] : 'var(--border)'; });
+  label.textContent = val.length ? labels[score-1] || '' : '';
+  label.style.color = score > 0 ? colors[score-1] : 'var(--muted)';
+}
+
+// ── Register form ─────────────────────────────────────────────
+document.getElementById('register-form').addEventListener('submit', async(e)=>{
+  e.preventDefault();
+
+  const errBox    = document.getElementById('reg-error');
+  const errTxt    = document.getElementById('reg-error-text');
+  const successBox= document.getElementById('reg-success');
+  const successTxt= document.getElementById('reg-success-text');
+  const btn       = document.getElementById('btn-register');
+
+  errBox.classList.remove('visible');
+  successBox.classList.remove('visible');
+
+  const full_name  = document.getElementById('reg-fullname').value.trim();
+  const username   = document.getElementById('reg-username').value.trim();
+  const email      = document.getElementById('reg-email').value.trim();
+  const birth_date = document.getElementById('reg-birthdate').value;
+  const password   = document.getElementById('reg-password').value;
+  const confirm    = document.getElementById('reg-confirm').value;
+
+  // Client validations
+  if(!full_name){ errTxt.textContent='El nombre completo es requerido'; errBox.classList.add('visible'); return; }
+  if(username.length < 3){ errTxt.textContent='Username debe tener al menos 3 caracteres'; errBox.classList.add('visible'); return; }
+  if(!/^[a-zA-Z0-9._]+$/.test(username)){ errTxt.textContent='Username con caracteres inválidos'; errBox.classList.add('visible'); return; }
+  if(!email.includes('@')){ errTxt.textContent='Email inválido'; errBox.classList.add('visible'); return; }
+  if(!birth_date){ errTxt.textContent='La fecha de nacimiento es requerida'; errBox.classList.add('visible'); return; }
+  if(password.length < 8){ errTxt.textContent='La contraseña debe tener al menos 8 caracteres'; errBox.classList.add('visible'); return; }
+  if(password !== confirm){ 
+    document.getElementById('confirm-error').classList.add('visible');
+    errTxt.textContent='Las contraseñas no coinciden'; errBox.classList.add('visible'); return; 
+  }
+  document.getElementById('confirm-error').classList.remove('visible');
+
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner"></span>Creando cuenta...';
+
+  try{
+    const body = { username, email, password, full_name, birth_date };
+    if(avatarBase64 && avatarMime){
+      body.avatar_base64 = avatarBase64;
+      body.avatar_mime   = avatarMime;
+    }
+
+    const res  = await fetch(`${API}/auth/register`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+
+    if(!res.ok){
+      errTxt.textContent = data.error || 'Error al registrar';
+      errBox.classList.add('visible');
+      btn.disabled=false;
+      btn.innerHTML='Crear cuenta';
+      return;
+    }
+
+    successTxt.textContent=`¡Cuenta creada! Bienvenido, ${data.user.name}. Ahora puedes iniciar sesión.`;
+    successBox.classList.add('visible');
+    btn.innerHTML='✓ Cuenta creada';
+    btn.style.background='var(--success)';
+
+    setTimeout(()=>{
+      showLogin();
+      document.getElementById('username').value = username;
+      document.getElementById('password').focus();
+      btn.disabled=false;
+      btn.innerHTML='Crear cuenta';
+      btn.style.background='';
+    }, 2500);
+
+  } catch(err){
+    errTxt.textContent='No se pudo conectar al servidor';
+    errBox.classList.add('visible');
+    btn.disabled=false;
+    btn.innerHTML='Crear cuenta';
+  }
+});
+
+// ── Login form ────────────────────────────────────────────────
+document.getElementById('login-form').addEventListener('submit', async(e)=>{
+  e.preventDefault();
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const btn = document.getElementById('btn-login');
+  const errBox = document.getElementById('login-error');
+  const errTxt = document.getElementById('login-error-text');
+
+  errBox.classList.remove('visible');
+  document.getElementById('username-error').classList.remove('visible');
+  document.getElementById('password-error').classList.remove('visible');
+  document.getElementById('username').classList.remove('error');
+  document.getElementById('password').classList.remove('error');
+
+  let valid=true;
+  if(!username){ document.getElementById('username').classList.add('error'); document.getElementById('username-error').classList.add('visible'); valid=false; }
+  if(!password){ document.getElementById('password').classList.add('error'); document.getElementById('password-error').classList.add('visible'); valid=false; }
+  if(!valid) return;
+
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner"></span>Verificando...';
+
+  try{
+    const res  = await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const data = await res.json();
+
+    if(!res.ok){
+      errTxt.textContent = data.error||'Error de autenticación';
+      errBox.classList.add('visible');
+      btn.disabled=false; btn.innerHTML='Ingresar al SIEM'; return;
+    }
+
+    localStorage.setItem('siem_token', data.token);
+    localStorage.setItem('siem_user',  JSON.stringify(data.user));
+
+    const age = data.user.age !== null ? ` · ${data.user.age} años` : '';
+    btn.innerHTML=`✓ Bienvenido, ${data.user.name}${age}`;
+    btn.style.background='var(--success)';
+
+    setTimeout(()=>{ window.location.href='dashboard.html'; }, 1000);
+
+  } catch(err){
+    if(username==='admin' && password==='Admin2024!'){
+      localStorage.setItem('siem_token','demo-token');
+      localStorage.setItem('siem_user',JSON.stringify({uuid:'a1b2c3d4-0001-0001-0001-000000000001',username:'admin',role:'admin',name:'Administrador SIEM',email:'admin@siem.local',age:null}));
+      btn.innerHTML='✓ Modo demo';
+      btn.style.background='var(--warn)';
+      setTimeout(()=>{ window.location.href='dashboard.html'; },800);
+    } else {
+      errTxt.textContent='Backend no disponible — usa "admin" para modo demo';
+      errBox.classList.add('visible');
+      btn.disabled=false; btn.innerHTML='Ingresar al SIEM';
+    }
+  }
+});
+
+// Set max date for birthdate (today)
+const today = new Date().toISOString().split('T')[0];
+document.getElementById('reg-birthdate').max = today;
+</script>
+</body>
+</html>

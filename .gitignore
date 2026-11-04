@@ -1,0 +1,17 @@
+# Secretos
+.env
+.env.*
+!.env.example
+# Dependencias y builds
+node_modules/
+.next/
+# Datos y respaldos
+backups/
+backup_siem.sql
+db/**/backup_*.sql
+backend/uploads/
+# Otros
+*.deb
+*.log
+.DS_Store
+*.bak
