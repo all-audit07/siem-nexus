@@ -73,10 +73,12 @@ Cada usuario debe tener **un único rol activo**: combinar roles (por ejemplo, a
 | v1.0 | SIEM: importación, detección, correlación, dashboard, informe técnico y PDF |
 | v1.0.1 | Corrección de seguridad: credenciales y acceso demo eliminados del login |
 | v2.0 | Modo auditoría: hallazgos ISO 27001 / CIS v8, informe de auditoría, seguimiento y bloqueo de cuentas |
+| v2.1 | Revisión independiente con CodeQL: ReDoS, aleatoriedad insegura y límites de peticiones (H-16 a H-21) |
 
-## Próximos pasos (v2.1)
+## Próximos pasos
 
-- Impedir en el código combinaciones de roles incompatibles.
+- Impedir en el código combinaciones de roles incompatibles (H-13).
+- Proxy inverso que registre la IP real del cliente (H-21).
 - Bóveda de evidencias con cadena de custodia en SQL Server.
 - Registro de auditoría encadenado por hash.
 - Informes firmados digitalmente.

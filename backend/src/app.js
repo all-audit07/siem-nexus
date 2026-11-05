@@ -19,19 +19,40 @@ app.use(cors({
     credentials: true,
 }));
 
-// Límite de intentos SOLO para el login (no para registro ni comprobaciones de disponibilidad)
-const loginLimiter = rateLimit({
-    windowMs: 2 * 60 * 1000,
-    max: 10,
-    message: { error: 'Demasiados intentos. Espera 2 minutos.' },
+// v2.1 · H-21: NO se confía en X-Forwarded-For. El proxy de Next.js no añade la IP real del cliente:
+// solo reenvía la cabecera si el cliente la envía, así que confiar en ella permitiría falsear la IP.
+// Riesgo aceptado: req.ip es la IP del proxy. Corrección prevista: un proxy inverso que fije la IP real.
+app.set('trust proxy', false);
+
+const limiter = (windowMin, max, message, extra = {}) => rateLimit({
+    windowMs: windowMin * 60 * 1000, max, standardHeaders: true, legacyHeaders: false,
+    message: { error: message }, ...extra,
 });
+
+// Login: 10 intentos cada 2 minutos por IP (el bloqueo por cuenta está en el servicio de login)
+const loginLimiter = limiter(2, 10, 'Demasiados intentos. Espera 2 minutos.');
+// v2.1 · H-18: registro, 10 cada 15 minutos por IP (cada registro calcula un bcrypt)
+const registerLimiter = limiter(15, 10, 'Demasiados registros desde esta dirección. Espera 15 minutos.');
+// v2.1 · H-20: comprobaciones de disponibilidad, 30 por minuto por IP (impide enumerar cuentas en masa)
+const checkLimiter = limiter(1, 30, 'Demasiadas comprobaciones. Espera un minuto.');
+// v2.1 · H-19: operaciones costosas (análisis, IA, hallazgos y PDF), 30 cada 15 minutos por IP
+const HEAVY = /^\/api\/(imports\/\d+\/(analyze|reports|audit|audit-report\.pdf)|analysis\/reports\/\d+\/pdf)(\?|$)/;
+const heavyLimiter = limiter(15, 30, 'Demasiadas operaciones costosas. Espera unos minutos.', {
+    skip: (req) => !(HEAVY.test(req.originalUrl) && (req.method === 'POST' || req.originalUrl.includes('pdf'))),
+});
+// v2.1 · H-19: límite general para toda la API, 600 peticiones cada 15 minutos por IP
+const apiLimiter = limiter(15, 600, 'Demasiadas peticiones. Espera unos minutos.');
 
 // 4 MB: el avatar (máx. 2 MB) llega en base64, que ocupa ~33 % más
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan('dev'));
+app.use(morgan(':remote-addr :method :url :status :response-time ms'));
 
+app.use('/api', apiLimiter);
+app.use('/api', heavyLimiter);
 app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/register', registerLimiter);
+app.use(['/api/auth/check-username', '/api/auth/check-email'], checkLimiter);
 app.use('/api/auth',      authRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/imports',   importRoutes);
