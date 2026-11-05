@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
 const path   = require('path');
 const fs     = require('fs');
+const crypto = require('crypto');
 const db     = require('../services/dbAdapter');
 const lockout = require('../services/lockoutService');
 
@@ -115,6 +116,10 @@ const register = async (req, res) => {
         if (!username || !email || !password || !full_name || !birth_date)
             return res.status(400).json({ error: 'Todos los campos son requeridos' });
 
+        // v2.1 · Todos los campos deben ser texto (evita objetos o listas en el JSON)
+        if ([username, email, password, full_name, birth_date].some((v) => typeof v !== 'string'))
+            return res.status(400).json({ error: 'Formato de datos inválido' });
+
         // Validación longitud username
         if (username.length < 3 || username.length > 20)
             return res.status(400).json({ error: 'Username debe tener entre 3 y 20 caracteres' });
@@ -123,12 +128,12 @@ const register = async (req, res) => {
         if (!/^[a-zA-Z0-9._]+$/.test(username))
             return res.status(400).json({ error: 'Username solo puede contener letras, números, puntos y guiones bajos' });
 
-        // Validación email
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-            return res.status(400).json({ error: 'Email inválido' });
-
+        // Validación email (v2.1 · H-16): la longitud se comprueba ANTES de la expresión regular,
+        // y la expresión no es ambigua (las etiquetas del dominio no contienen puntos), así que es lineal
         if (email.length > 254)
             return res.status(400).json({ error: 'Email demasiado largo' });
+        if (!/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(email))
+            return res.status(400).json({ error: 'Email inválido' });
 
         // Validación password
         if (password.length < 8 || password.length > 72)
@@ -166,7 +171,8 @@ const register = async (req, res) => {
 
             // Guardar archivo
             const ext = avatar_mime.split('/')[1].replace('jpeg','jpg');
-            const filename = `avatar_${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+            // v2.1 · H-17: nombre aleatorio criptográfico (128 bits), imposible de adivinar
+            const filename = `avatar_${crypto.randomBytes(16).toString('hex')}.${ext}`;
             const uploadDir = path.join('/app/uploads/avatars');
             fs.mkdirSync(uploadDir, { recursive: true });
             fs.writeFileSync(path.join(uploadDir, filename), buffer);
