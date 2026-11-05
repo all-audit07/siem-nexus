@@ -214,7 +214,12 @@ const listFindings = async (importId) => {
         `SELECT f.*,
                 COALESCE((SELECT json_agg(json_build_object('id', c.control_id, 'title', c.title) ORDER BY c.control_id)
                             FROM audit_controls c
-                           WHERE c.framework = 'ISO27001' AND c.control_id = ANY(f.iso_controls)), '[]') AS iso_detail
+                           WHERE c.framework = 'ISO27001' AND c.control_id = ANY(f.iso_controls)), '[]') AS iso_detail,
+                COALESCE((SELECT json_agg(json_build_object('id', i.id, 'title', i.title, 'severity', i.severity) ORDER BY i.id)
+                            FROM incidents i WHERE i.id = ANY(f.incident_ids)), '[]') AS incident_detail,
+                COALESCE((SELECT json_agg(json_build_object('id', a.id, 'title', a.title, 'severity', a.severity, 'rule_code', r.code) ORDER BY a.id)
+                            FROM alerts a LEFT JOIN correlation_rules r ON r.id = a.rule_id
+                           WHERE a.id = ANY(f.alert_ids)), '[]') AS alert_detail
            FROM audit_findings f
           WHERE f.import_id = $1
           ORDER BY f.severity DESC, f.code`, [importId]);
