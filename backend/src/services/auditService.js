@@ -62,7 +62,7 @@ const ruleFindings = async (client, importId) => {
 
     const byCode = new Map();
     for (const row of rows) {
-        if (!byCode.has(row.code)) byCode.set(row.code, { code: row.code, name: row.name, alerts: [] });
+        if (!byCode.has(row.code)) byCode.set(row.code, { code: row.code, name: row.name.replace(/^[A-Z]{2}-\d{3}\s*·\s*/, ''), alerts: [] });
         byCode.get(row.code).alerts.push(row);
     }
 
@@ -125,22 +125,25 @@ const inventoryFinding = async (client, importId) => {
              SELECT destination, source_log_id FROM security_events
               WHERE import_id = $1 AND destination ~ '^[A-Za-z][A-Za-z0-9-]*$'
          )
-         SELECT lower(regexp_replace(name, '[^A-Za-z0-9]', '', 'g')) AS key,
-                array_agg(DISTINCT name ORDER BY name) AS variants,
-                array_agg(DISTINCT source_log_id) AS log_ids
-           FROM names
-          GROUP BY 1
-         HAVING count(DISTINCT name) > 1`, [importId]);
+         , per AS (
+             SELECT lower(regexp_replace(name, '[^A-Za-z0-9]', '', 'g')) AS key, name,
+                    count(*)::int AS n, min(source_log_id) AS first_id
+               FROM names GROUP BY 1, 2
+         )
+         SELECT key, json_agg(json_build_object('name', name, 'n', n, 'first', first_id) ORDER BY name) AS variants
+           FROM per
+          GROUP BY key
+         HAVING count(*) > 1`, [importId]);
     if (!rows.length) return null;
 
-    const groups = rows.map((r) => r.variants.join(' / '));
-    const logIds = sortLogIds(rows.flatMap((r) => r.log_ids));
+    const groups = rows.map((r) => r.variants
+        .map((v) => `${v.name} (${plural(v.n, 'registro', 'registros')}, p. ej. ${v.first})`).join(' / '));
+    const logIds = sortLogIds(rows.flatMap((r) => r.variants.map((v) => v.first)));
     return {
         code: 'T-02',
         severity: 2,
         condition:
-            `Los registros usan nombres distintos que podrían corresponder al mismo equipo: ${groups.join('; ')}. ` +
-            `Evidencia: ${plural(logIds.length, 'registro', 'registros')} (${evidenceText(logIds)}).`,
+            `Los registros usan nombres distintos que podrían corresponder al mismo equipo: ${groups.join('; ')}.`,
         alertIds: [],
         incidentIds: [],
         logIds,
