@@ -127,7 +127,7 @@ const inventoryFinding = async (client, importId) => {
          )
          , per AS (
              SELECT lower(regexp_replace(name, '[^A-Za-z0-9]', '', 'g')) AS key, name,
-                    count(*)::int AS n, min(source_log_id) AS first_id
+                    count(DISTINCT source_log_id)::int AS n, min(source_log_id) AS first_id
                FROM names GROUP BY 1, 2
          )
          SELECT key, json_agg(json_build_object('name', name, 'n', n, 'first', first_id) ORDER BY name) AS variants
