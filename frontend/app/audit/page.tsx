@@ -444,7 +444,13 @@ function FollowUp({ f, user, onChanged }: { f: Finding; user: SiemUser | null; o
                   <b>{h.changed_by}</b> <span className="text-[#94A3B8]">({h.changed_role})</span>
                   {h.old_status !== h.new_status && <> · {STATUS[h.old_status || ""]?.label || h.old_status} → <b>{STATUS[h.new_status || ""]?.label || h.new_status}</b></>}
                   {h.old_owner !== h.new_owner && <> · responsable: {h.new_owner || "sin asignar"}</>}
-                  {h.note && <div className="text-[#CBD5E1] mt-0.5">“{h.note}”</div>}
+                  {h.note && (
+                    <div className="mt-1 rounded-md px-2.5 py-1.5"
+                      style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.28)", color: "#FEF3C7" }}>
+                      <span className="font-mono text-[9.5px] uppercase tracking-[0.1em]" style={{ color: "#FACC15" }}>Nota de evidencia</span>
+                      <div className="mt-0.5">“{h.note}”</div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ol>
