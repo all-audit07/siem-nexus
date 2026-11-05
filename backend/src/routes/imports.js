@@ -7,6 +7,7 @@ const ctrl     = require('../controllers/importController');
 const analysis = require('../controllers/analysisController');
 const events   = require('../controllers/eventsController');
 const reports  = require('../controllers/reportsController');
+const auditCtl = require('../controllers/auditController');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
 const MAX_FILE_MB = 10;
@@ -51,5 +52,9 @@ router.get('/:id/summary',   events.summary);
 // Informes técnicos
 router.post('/:id/reports',  requireRole('admin', 'analyst'), reports.create);
 router.get('/:id/reports',   reports.list);
+
+// v2.0 · Modo auditoría (generar: admin y auditor)
+router.post('/:id/audit',          requireRole('admin', 'auditor'), auditCtl.generate);
+router.get('/:id/audit-findings', auditCtl.list);
 
 module.exports = router;
