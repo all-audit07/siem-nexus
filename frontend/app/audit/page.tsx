@@ -38,11 +38,6 @@ const TYPE: Record<string, { label: string; cls: string; hint: string }> = {
   indicador:   { label: "Indicador",   cls: "bg-purple-500/10 text-purple-200 border-purple-500/20", hint: "Actividad sospechosa que por sí sola no demuestra un fallo de control" },
 };
 const CAN_GENERATE = ["admin", "auditor"];
-// Páginas oficiales: ISO no publica el texto de cada control (la norma es de pago), CIS sí es pública
-const ISO_URL = "https://www.iso.org/standard/82875.html";
-const CIS_URL = "https://www.cisecurity.org/controls/v8-1";
-const CIS_ES_URL = "https://www.cisecurity.org/insights/white-papers/cis-critical-security-controls-v8-1-spanish";
-const ISO_HINT = "Página oficial de ISO/IEC 27001:2022. La norma es de pago: ISO no publica el texto de cada control.";
 const MANAGE_ROLES = ["admin", "auditor", "responder", "analyst"];
 const VERIFY_ROLES = ["admin", "auditor"];
 const TRANSITIONS: Record<string, string[]> = {
@@ -203,9 +198,7 @@ function ControlMatrix({ controls, onPick }: { controls: Control[]; onPick: (cod
         <tbody>
           {controls.map((c) => (
             <tr key={c.id} className="border-b border-white/[0.04] last:border-0">
-              <td className="px-5 py-2.5 font-mono font-semibold">
-                <a href={ISO_URL} target="_blank" rel="noopener noreferrer" title={ISO_HINT} className="hover:text-blue-300">{c.id} ↗</a>
-              </td>
+              <td className="px-5 py-2.5 font-mono font-semibold">{c.id}</td>
               <td className="px-3 py-2.5">{c.title}</td>
               <td className="px-3 py-2.5"><Pill cls={SEVERITY[c.severity]?.cls || ""}>{SEVERITY[c.severity]?.label}</Pill></td>
               <td className="px-5 py-2.5">
@@ -259,22 +252,9 @@ function FindingCard({ f, importId, open, onToggle, user, onChanged }:
             <Attr label="Condición" tag="Probada por la evidencia" tagCls="text-green-300" wide>{f.condition}</Attr>
             <Attr label="Criterio">
               <ul className="space-y-0.5">
-                {f.iso_detail.map((c) => (
-                  <li key={c.id}>
-                    <a href={ISO_URL} target="_blank" rel="noopener noreferrer" title={ISO_HINT}
-                      className="hover:text-blue-300 underline decoration-white/20 underline-offset-2">
-                      ISO/IEC 27001:2022 · <b className="font-mono">{c.id}</b> {c.title} ↗
-                    </a>
-                  </li>
-                ))}
-                <li className="text-[#94A3B8]">
-                  <a href={CIS_URL} target="_blank" rel="noopener noreferrer" title="Página oficial de CIS Controls v8.1"
-                    className="hover:text-blue-300 underline decoration-white/20 underline-offset-2">CIS Controls v8 · {f.cis_safeguards.join(", ")} ↗</a>
-                  {" · "}
-                  <a href={CIS_ES_URL} target="_blank" rel="noopener noreferrer" className="hover:text-blue-300 underline decoration-white/20 underline-offset-2">versión en español ↗</a>
-                </li>
+                {f.iso_detail.map((c) => <li key={c.id}>ISO/IEC 27001:2022 · <b className="font-mono">{c.id}</b> {c.title}</li>)}
+                <li className="text-[#94A3B8]">CIS Controls v8 · {f.cis_safeguards.join(", ")}</li>
               </ul>
-              <p className="text-[10.5px] text-[#94A3B8]/80 mt-1">ISO/IEC 27001 es una norma de pago: el enlace abre su página oficial, no el texto del control.</p>
             </Attr>
             <Attr label="Efecto">{f.effect || "—"}</Attr>
             <Attr label="Causa probable" tag="Hipótesis: verificar" tagCls="text-yellow-300">{f.probable_cause}</Attr>
