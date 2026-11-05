@@ -56,5 +56,6 @@ router.get('/:id/reports',   reports.list);
 // v2.0 · Modo auditoría (generar: admin y auditor)
 router.post('/:id/audit',          requireRole('admin', 'auditor'), auditCtl.generate);
 router.get('/:id/audit-findings', auditCtl.list);
+router.get('/:id/audit-report.pdf', auditCtl.reportPdf);
 
 module.exports = router;

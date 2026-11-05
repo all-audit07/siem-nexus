@@ -1,6 +1,7 @@
 // src/controllers/auditController.js
 // v2.0 · Modo auditoría: generación y consulta de hallazgos de auditoría.
 const audit = require('../services/auditService');
+const { buildAuditReport, renderAuditPdf } = require('../services/auditReportService');
 const db    = require('../services/dbAdapter');
 
 const { AuditError } = audit;
@@ -41,4 +42,23 @@ const list = handle(async (req, res) => {
     res.json(await audit.listFindings(parseId(req.params.id)));
 });
 
-module.exports = { generate, list };
+// GET /api/imports/:id/audit-report.pdf — informe de auditoría con los hallazgos actuales
+const reportPdf = handle(async (req, res) => {
+    const importId = parseId(req.params.id);
+    const report = await buildAuditReport(importId, req.user.username);
+    try {
+        await db.logAuditAction({
+            userUuid: req.user.uuid, action: 'audit.report_pdf', targetType: 'log_imports',
+            targetId: importId, oldValues: null,
+            newValues: { findings: report.totals.total, fingerprint: report.meta.fingerprint }, ipAddress: req.ip,
+        });
+    } catch (e) {
+        console.log('Audit log skipped:', e.message);
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="informe-auditoria-importacion-${importId}.pdf"`);
+    res.setHeader('X-Audit-Fingerprint', report.meta.fingerprint);
+    renderAuditPdf(report, res);
+});
+
+module.exports = { generate, list, reportPdf };
