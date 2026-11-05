@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/siem/AppShell";
 import { Banner, Card, ImportPicker, NoAnalysis, Pill, Spinner, Stat, useSelectedImport } from "@/components/siem/ui";
-import { SessionExpiredError, SEVERITY, SiemUser, apiFetch } from "@/lib/siem";
+import { API, SessionExpiredError, SEVERITY, SiemUser, apiFetch, getToken } from "@/lib/siem";
 
 interface Finding {
   id: number; code: string; finding_type: "deficiencia" | "indicador"; severity: number; severity_label: string;
@@ -71,6 +71,28 @@ function AuditView({ user }: { user: SiemUser | null }) {
 
   const generate = async () => { setBusy(true); await call("POST"); setBusy(false); };
 
+  // Descarga el informe de auditoría en PDF (necesita el token, por eso no es un enlace directo)
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const downloadPdf = async () => {
+    if (!selected) return;
+    setError(null); setPdfBusy(true);
+    try {
+      const res = await fetch(`${API}/imports/${selected}/audit-report.pdf`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (res.status === 401) { router.replace("/login"); return; }
+      if (!res.ok) { setError((await res.json().catch(() => null))?.error || "No se pudo generar el informe de auditoría"); return; }
+      const blob = await res.blob();
+      const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] || `informe-auditoria-${selected}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement("a"), { href: url, download: name });
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Error inesperado al descargar el informe de auditoría");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const stats = useMemo(() => {
     const f = data?.findings || [];
     return {
@@ -92,14 +114,22 @@ function AuditView({ user }: { user: SiemUser | null }) {
     <div className="max-w-[1180px] mx-auto space-y-5">
       <div className="flex items-center justify-between gap-3">
         <ImportPicker imports={imports} selected={selected} onChange={select} />
-        {canGenerate ? (
-          <button onClick={generate} disabled={busy}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-[13px] font-semibold px-4 py-2 rounded-lg transition-colors">
-            {busy && <Spinner />}{data?.total ? "Regenerar hallazgos" : "Generar hallazgos"}
-          </button>
-        ) : (
-          <p className="text-[12px] text-[#94A3B8]">Solo los roles admin y auditor generan hallazgos.</p>
-        )}
+        <div className="flex items-center gap-2">
+          {!!data?.total && (
+            <button onClick={downloadPdf} disabled={pdfBusy}
+              className="flex items-center gap-2 border border-white/[0.15] hover:bg-white/[0.06] disabled:opacity-60 text-[#E2E8F0] text-[13px] font-semibold px-4 py-2 rounded-lg transition-colors">
+              {pdfBusy && <Spinner />}Informe de auditoría (PDF)
+            </button>
+          )}
+          {canGenerate ? (
+            <button onClick={generate} disabled={busy}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-[13px] font-semibold px-4 py-2 rounded-lg transition-colors">
+              {busy && <Spinner />}{data?.total ? "Regenerar hallazgos" : "Generar hallazgos"}
+            </button>
+          ) : (
+            <p className="text-[12px] text-[#94A3B8]">Solo los roles admin y auditor generan hallazgos.</p>
+          )}
+        </div>
       </div>
 
       {error && <Banner tone="error">{error}</Banner>}
