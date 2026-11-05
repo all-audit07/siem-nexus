@@ -172,4 +172,4 @@ ON CONFLICT (code) DO UPDATE SET
     version        = EXCLUDED.version;
 
 COMMIT;
-EOF
+
