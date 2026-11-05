@@ -61,4 +61,26 @@ const reportPdf = handle(async (req, res) => {
     renderAuditPdf(report, res);
 });
 
-module.exports = { generate, list, reportPdf };
+// PATCH /api/analysis/audit-findings/:id — { status?, owner?, note? }
+const update = handle(async (req, res) => {
+    const id = parseId(req.params.id);
+    const { status, owner, note } = req.body || {};
+    const result = await audit.updateFinding(id, req.user, { status, owner, note });
+    try {
+        await db.logAuditAction({
+            userUuid: req.user.uuid, action: 'audit.finding_update', targetType: 'audit_findings',
+            targetId: id, oldValues: { status: result.old_status },
+            newValues: { status: result.status, owner: result.owner }, ipAddress: req.ip,
+        });
+    } catch (e) {
+        console.log('Audit log skipped:', e.message);
+    }
+    res.json(result);
+});
+
+// GET /api/analysis/audit-findings/:id/history
+const history = handle(async (req, res) => {
+    res.json(await audit.getHistory(parseId(req.params.id)));
+});
+
+module.exports = { generate, list, reportPdf, update, history };

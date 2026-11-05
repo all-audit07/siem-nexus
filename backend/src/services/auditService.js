@@ -243,5 +243,90 @@ const listFindings = async (importId) => {
     };
 };
 
-module.exports = { AuditError, generateFindings, listFindings };
+// ── Seguimiento ──────────────────────────────────────────────────────────────
+
+// Transiciones permitidas y quién puede hacerlas
+const TRANSITIONS = {
+    abierto:        ['en_remediacion'],
+    en_remediacion: ['cerrado'],
+    cerrado:        ['verificado', 'en_remediacion'],   // verificar o rechazar el cierre
+    verificado:     [],
+};
+const MANAGE_ROLES = ['admin', 'auditor', 'responder', 'analyst'];
+const VERIFY_ROLES = ['admin', 'auditor'];
+const MIN_NOTE = 10;
+
+const updateFinding = async (findingId, user, { status, owner, note } = {}) => {
+    const role = String(user?.role || '').toLowerCase();
+    if (!MANAGE_ROLES.includes(role)) throw new AuditError('Permisos insuficientes', 403);
+    const cleanOwner = owner === undefined ? undefined : String(owner).trim().slice(0, 80) || null;
+    const cleanNote = note === undefined || note === null ? null : String(note).trim().slice(0, 2000) || null;
+    if (status === undefined && cleanOwner === undefined) throw new AuditError('Indica un estado o un responsable', 400);
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const { rows: [f] } = await client.query('SELECT * FROM audit_findings WHERE id = $1 FOR UPDATE', [findingId]);
+        if (!f) throw new AuditError('Hallazgo no encontrado', 404);
+        if (f.status === 'verificado') throw new AuditError('Un hallazgo verificado no puede modificarse', 409);
+
+        const next = status === undefined || status === f.status ? f.status : status;
+        const nextOwner = cleanOwner === undefined ? f.owner : cleanOwner;
+
+        if (next !== f.status) {
+            if (!(TRANSITIONS[f.status] || []).includes(next)) {
+                throw new AuditError(`No se puede pasar de «${f.status}» a «${next}»`, 409);
+            }
+            if (next === 'en_remediacion' && !nextOwner) {
+                throw new AuditError('Asigna un responsable antes de iniciar la remediación', 422);
+            }
+            const needsNote = next === 'cerrado' || next === 'verificado' || (f.status === 'cerrado' && next === 'en_remediacion');
+            if (needsNote && (!cleanNote || cleanNote.length < MIN_NOTE)) {
+                throw new AuditError(`Este cambio exige una nota de evidencia de al menos ${MIN_NOTE} caracteres`, 422);
+            }
+            if (next === 'verificado') {
+                if (!VERIFY_ROLES.includes(role)) throw new AuditError('Solo los roles auditor y admin pueden verificar un hallazgo', 403);
+                if (f.closed_by && f.closed_by === user.username) {
+                    throw new AuditError('Segregación de funciones: quien cerró el hallazgo no puede verificarlo', 403);
+                }
+            }
+        } else if (nextOwner === f.owner) {
+            throw new AuditError('No hay cambios que guardar', 400);
+        }
+
+        await client.query(
+            `UPDATE audit_findings SET
+                status      = $2::text,
+                owner       = $3::text,
+                closed_by   = CASE WHEN $2::text = 'cerrado' THEN $4::text WHEN $2::text = 'en_remediacion' THEN NULL ELSE closed_by END,
+                closed_at   = CASE WHEN $2::text = 'cerrado' THEN now() WHEN $2::text = 'en_remediacion' THEN NULL ELSE closed_at END,
+                verified_by = CASE WHEN $2::text = 'verificado' THEN $4::text ELSE verified_by END,
+                verified_at = CASE WHEN $2::text = 'verificado' THEN now() ELSE verified_at END
+              WHERE id = $1`,
+            [findingId, next, nextOwner, user.username]);
+
+        await client.query(
+            `INSERT INTO audit_finding_history
+               (finding_id, changed_by, changed_role, old_status, new_status, old_owner, new_owner, note)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [findingId, user.username, role, f.status, next, f.owner, nextOwner, cleanNote]);
+
+        await client.query('COMMIT');
+        return { id: findingId, code: f.code, import_id: f.import_id, old_status: f.status, status: next, owner: nextOwner };
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+};
+
+const getHistory = async (findingId) => {
+    const { rows } = await pool.query(
+        `SELECT changed_at, changed_by, changed_role, old_status, new_status, old_owner, new_owner, note
+           FROM audit_finding_history WHERE finding_id = $1 ORDER BY changed_at, id`, [findingId]);
+    return rows;
+};
+
+module.exports = { AuditError, generateFindings, listFindings, updateFinding, getHistory, TRANSITIONS };
 

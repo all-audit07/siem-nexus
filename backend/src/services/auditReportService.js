@@ -72,6 +72,7 @@ const buildAuditReport = async (importId, generatedBy) => {
     const canonical = findings.map((f) => ({
         code: f.code, severity: f.severity, type: f.finding_type, iso: f.iso_controls, cis: f.cis_safeguards,
         condition: f.condition, evidence: f.evidence_log_ids, status: f.status, owner: f.owner,
+        closed_by: f.closed_by || null, verified_by: f.verified_by || null,
         due: fmtDate(f.due_date), mapping: f.mapping_version,
     }));
     const fingerprint = crypto.createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
@@ -83,7 +84,7 @@ const buildAuditReport = async (importId, generatedBy) => {
         const top = [...controls].sort((a, b) => b.findings.length - a.findings.length || b.severity - a.severity)[0];
         return {
             name: d.name, controls, worst, rating: RATING[worst],
-            text: `Se identificaron deficiencias o indicadores en ${pl(controls.length, 'control', 'controles')}: ${listText(controls.map((c) => c.id))}. ` +
+            text: `Se identificaron deficiencias o indicadores en ${pl(controls.length, 'control', 'controles')}: ${listText(controls.map((c) => c.id).sort((x, y) => x.localeCompare(y, 'en', { numeric: true })))}. ` +
                   `El control con más evidencia es ${top.id} ${top.title} (${pl(top.findings.length, 'hallazgo', 'hallazgos')}: ${top.findings.join(', ')}).`,
         };
     }).filter(Boolean);
@@ -229,7 +230,7 @@ const renderAuditPdf = (r, stream) => {
         ['Archivo evaluado', `${imp.file_name} (hoja «${imp.sheet_name || '—'}»)`],
         ['Importación', `#${imp.id} · ${imp.rows_valid} eventos (${imp.rows_rejected} filas rechazadas)`],
         ['Periodo de los registros', `${fmtLocal(r.meta.period.first_at)} - ${fmtLocal(r.meta.period.last_at)} (hora de Panamá)`],
-        ['Hallazgos', `${r.totals.total} (${r.totals.deficiencies} deficiencias, ${r.totals.indicators} indicadores) en ${r.controls.length} controles`],
+        ['Hallazgos', `${r.totals.total} (${pl(r.totals.deficiencies, 'deficiencia', 'deficiencias')}, ${pl(r.totals.indicators, 'indicador', 'indicadores')}) en ${pl(r.controls.length, 'control', 'controles')}`],
         ['Generado', `${fmtLocal(r.meta.generated_at)}${r.meta.generated_by ? ` por ${r.meta.generated_by}` : ''}`],
         ['SHA-256 del archivo', imp.file_sha256 || '—'],
         ['Huella de los hallazgos (SHA-256)', r.meta.fingerprint],
@@ -293,7 +294,8 @@ const renderAuditPdf = (r, stream) => {
         font('Helvetica-Bold', 11.5).text(t(`${f.code} · ${f.iso_detail.map((c) => `${c.id} ${c.title}`).join(' · ')}`),
             L + w + w2 + 14, y, { width: W - w - w2 - 14 });
         doc.moveDown(0.3);
-        para(`Estado: ${STATUS[f.status] || f.status} · Responsable: ${f.owner || 'sin asignar'} · Fecha límite: ${fmtDate(f.due_date)} · Catálogo v${f.mapping_version}`,
+        para(`Estado: ${STATUS[f.status] || f.status} · Responsable: ${f.owner || 'sin asignar'} · Fecha límite: ${fmtDate(f.due_date)}` +
+             `${f.closed_by ? ` · Cerrado por ${f.closed_by}` : ''}${f.verified_by ? ` · Verificado por ${f.verified_by} el ${fmtLocal(f.verified_at, false)}` : ''} · Catálogo v${f.mapping_version}`,
             { size: 8.5, color: C.muted, after: 0.3 });
         table([
             { label: 'Atributo', key: 'k', w: 130, bold: true },
